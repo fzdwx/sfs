@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	port := flag.Int("p", 80, "Port to listen on")
+	port := flag.Int("p", 8080, "Port to listen on")
 	dir := flag.String("d", ".", "Directory to serve")
 	flag.Parse()
 
