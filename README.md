@@ -1,6 +1,6 @@
 # sfs
 
-static file server
+Static file server.
 
 ```shell
 Usage of sfs:
@@ -9,6 +9,8 @@ Usage of sfs:
   -p int
         Port to listen on (default 8080)
 ```
+
+Install:
 
 ```shell
 go install github.com/fzdwx/sfs@main
