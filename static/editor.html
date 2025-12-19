@@ -24,6 +24,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            z-index: 10;
         }
         .header h1 {
             font-size: 18px;
@@ -55,6 +56,73 @@
         }
         button.secondary:hover {
             background: #545b62;
+        }
+        .main-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+        .sidebar-header {
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #ddd;
+            font-weight: bold;
+            font-size: 14px;
+            color: #333;
+        }
+        .file-tree {
+            padding: 10px 0;
+        }
+        .tree-item {
+            padding: 6px 15px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            user-select: none;
+        }
+        .tree-item:hover {
+            background: #f0f0f0;
+        }
+        .tree-item.active {
+            background: #e7f3ff;
+            color: #007bff;
+        }
+        .tree-item.directory {
+            font-weight: 500;
+        }
+        .tree-item .icon {
+            margin-right: 6px;
+            width: 16px;
+            display: inline-block;
+        }
+        .tree-item .toggle {
+            margin-right: 4px;
+            width: 12px;
+            display: inline-block;
+            text-align: center;
+        }
+        .tree-item.collapsed .toggle::before {
+            content: '▶';
+        }
+        .tree-item.expanded .toggle::before {
+            content: '▼';
+        }
+        .tree-item.file .toggle {
+            opacity: 0;
+        }
+        .tree-children {
+            padding-left: 20px;
+        }
+        .tree-children.hidden {
+            display: none;
         }
         .editor-container {
             flex: 1;
@@ -104,19 +172,101 @@
         </div>
     </div>
 
-    <div class="editor-container">
-        <textarea id="editor" placeholder="开始编辑..."></textarea>
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header">文件列表</div>
+            <div class="file-tree" id="fileTree"></div>
+        </div>
+
+        <div class="editor-container">
+            <textarea id="editor" placeholder="开始编辑..."></textarea>
+        </div>
     </div>
 
     <script>
         let currentPath = '';
         let currentDir = '';
         let isNewFile = false;
+        let fileTreeData = {};
+
+        // 文件图标映射系统
+        const fileIcons = {
+            // 文档
+            'txt': '📝',
+            'doc': '📘',
+            'docx': '📘',
+            'pdf': '📕',
+            'md': '📓',
+
+            // 图片
+            'jpg': '🖼️',
+            'jpeg': '🖼️',
+            'png': '🖼️',
+            'gif': '🖼️',
+            'bmp': '🖼️',
+            'svg': '🖼️',
+            'webp': '🖼️',
+
+            // 视频
+            'mp4': '🎬',
+            'avi': '🎬',
+            'mkv': '🎬',
+            'mov': '🎬',
+
+            // 音频
+            'mp3': '🎵',
+            'wav': '🎵',
+            'flac': '🎵',
+
+            // 压缩包
+            'zip': '📦',
+            'rar': '📦',
+            'tar': '📦',
+            'gz': '📦',
+            '7z': '📦',
+
+            // 代码
+            'js': '📜',
+            'ts': '📜',
+            'py': '🐍',
+            'go': '🔷',
+            'java': '☕',
+            'cpp': '⚙️',
+            'c': '⚙️',
+            'html': '🌐',
+            'css': '🎨',
+            'json': '📋',
+            'xml': '📋',
+            'yaml': '📋',
+            'yml': '📋',
+
+            // 可执行文件
+            'exe': '⚙️',
+            'sh': '⚙️',
+            'bat': '⚙️',
+
+            // 默认
+            'default': '📄'
+        };
+
+        function getFileIcon(filename, isDir) {
+            if (isDir) return '📁';
+
+            const parts = filename.split('.');
+            if (parts.length === 1) {
+                return '❓';
+            }
+
+            const ext = parts.pop().toLowerCase();
+            return fileIcons[ext] || fileIcons['default'];
+        }
 
         window.onload = function() {
             const params = new URLSearchParams(window.location.search);
             const filePath = params.get('file');
             currentDir = params.get('dir') || '';
+
+            loadFileTree();
 
             if (filePath) {
                 currentPath = filePath;
@@ -126,6 +276,123 @@
                 document.getElementById('filename').textContent = '新建文件';
             }
         };
+
+        function loadFileTree(path = '') {
+            fetch('/api/files?path=' + encodeURIComponent(path))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        if (path === '') {
+                            renderFileTree(data.files || []);
+                        }
+                    }
+                })
+                .catch(err => {
+                    console.error('加载文件树失败:', err);
+                });
+        }
+
+        function renderFileTree(files, container = null, level = 0) {
+            if (!container) {
+                container = document.getElementById('fileTree');
+                container.textContent = '';
+            }
+
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'tree-item ' + (file.isDir ? 'directory collapsed' : 'file');
+                item.style.paddingLeft = (15 + level * 20) + 'px';
+
+                if (file.isDir) {
+                    const toggle = document.createElement('span');
+                    toggle.className = 'toggle';
+                    item.appendChild(toggle);
+                }
+
+                const icon = document.createElement('span');
+                icon.className = 'icon';
+                icon.textContent = getFileIcon(file.name, file.isDir);
+                item.appendChild(icon);
+
+                const name = document.createElement('span');
+                name.textContent = file.name;
+                item.appendChild(name);
+
+                if (file.path === currentPath) {
+                    item.classList.add('active');
+                }
+
+                if (file.isDir) {
+                    item.onclick = function(e) {
+                        e.stopPropagation();
+                        toggleDirectory(item, file.path, level);
+                    };
+                } else {
+                    item.onclick = function(e) {
+                        e.stopPropagation();
+                        openFile(file.path, file.size);
+                    };
+                }
+
+                container.appendChild(item);
+
+                if (file.isDir) {
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'tree-children hidden';
+                    childrenContainer.dataset.path = file.path;
+                    container.appendChild(childrenContainer);
+                }
+            });
+        }
+
+        function toggleDirectory(item, path, level) {
+            const isCollapsed = item.classList.contains('collapsed');
+            const childrenContainer = item.nextElementSibling;
+
+            if (isCollapsed) {
+                item.classList.remove('collapsed');
+                item.classList.add('expanded');
+
+                if (childrenContainer.children.length === 0) {
+                    fetch('/api/files?path=' + encodeURIComponent(path))
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.success) {
+                                renderFileTree(data.files || [], childrenContainer, level + 1);
+                                childrenContainer.classList.remove('hidden');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('加载目录失败:', err);
+                        });
+                } else {
+                    childrenContainer.classList.remove('hidden');
+                }
+            } else {
+                item.classList.remove('expanded');
+                item.classList.add('collapsed');
+                childrenContainer.classList.add('hidden');
+            }
+        }
+
+        function openFile(filePath, fileSize) {
+            const ONE_MB = 1024 * 1024;
+
+            if (fileSize && fileSize > ONE_MB) {
+                const sizeMB = (fileSize / ONE_MB).toFixed(2);
+                const confirmed = confirm(
+                    '该文件大小为 ' + sizeMB + ' MB，可能会导致浏览器卡顿。\n\n是否继续打开？'
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+
+            const urlParams = new URLSearchParams();
+            urlParams.set('file', filePath);
+            urlParams.set('dir', currentDir);
+            window.location.href = '/editor?' + urlParams.toString();
+        }
 
         function loadFile(filePath) {
             fetch('/api/read?path=' + encodeURIComponent(filePath))
@@ -172,9 +439,7 @@
                         isNewFile = false;
                         currentPath = path;
                         document.getElementById('filename').textContent = path;
-                        setTimeout(() => {
-                            window.location.href = '/?path=' + encodeURIComponent(currentDir);
-                        }, 1000);
+                        loadFileTree();
                     }
                 } else {
                     showMessage('保存失败: ' + data.error, 'error');

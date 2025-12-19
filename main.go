@@ -49,6 +49,7 @@ func startServer(port int, dir string) {
 	http.HandleFunc("/editor", handleEditor)
 	http.HandleFunc("/api/files", handleFileList)
 	http.HandleFunc("/api/upload", handleUpload)
+	http.HandleFunc("/api/put", handlePutFile)
 	http.HandleFunc("/api/mkdir", handleMkdir)
 	http.HandleFunc("/api/read", handleReadFile)
 	http.HandleFunc("/api/save", handleSaveFile)
@@ -88,10 +89,11 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 type FileInfo struct {
-	Name  string `json:"name"`
-	Path  string `json:"path"`
-	Size  int64  `json:"size"`
-	IsDir bool   `json:"isDir"`
+	Name    string `json:"name"`
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	IsDir   bool   `json:"isDir"`
+	ModTime int64  `json:"modTime"`
 }
 
 func handleFileList(w http.ResponseWriter, r *http.Request) {
@@ -121,10 +123,11 @@ func handleFileList(w http.ResponseWriter, r *http.Request) {
 
 		filePath := filepath.Join(path, entry.Name())
 		files = append(files, FileInfo{
-			Name:  entry.Name(),
-			Path:  filePath,
-			Size:  info.Size(),
-			IsDir: entry.IsDir(),
+			Name:    entry.Name(),
+			Path:    filePath,
+			Size:    info.Size(),
+			IsDir:   entry.IsDir(),
+			ModTime: info.ModTime().Unix(),
 		})
 	}
 
@@ -197,6 +200,73 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
+	})
+}
+
+func handlePutFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// 从查询参数获取目标路径
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Missing path parameter",
+		})
+		return
+	}
+
+	fullPath := filepath.Join(serveDir, path)
+
+	// 路径安全验证
+	if !strings.HasPrefix(filepath.Clean(fullPath), serveDir) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid path",
+		})
+		return
+	}
+
+	// 确保父目录存在
+	dir := filepath.Dir(fullPath)
+	err := os.MkdirAll(dir, 0755)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// 创建目标文件
+	dest, err := os.Create(fullPath)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	defer dest.Close()
+
+	// 将请求体写入文件
+	_, err = io.Copy(dest, r.Body)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"path":    path,
+		"message": "File uploaded successfully",
 	})
 }
 

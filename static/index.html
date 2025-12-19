@@ -34,6 +34,30 @@
             margin-bottom: 20px;
             flex-wrap: wrap;
         }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .search-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+        .search-input:focus {
+            border-color: #007bff;
+        }
+        .sort-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+        }
         button {
             padding: 8px 16px;
             background: #007bff;
@@ -114,6 +138,12 @@
         .btn-small:hover {
             background: #218838;
         }
+        .btn-small.download {
+            background: #17a2b8;
+        }
+        .btn-small.download:hover {
+            background: #138496;
+        }
         .breadcrumb {
             margin-bottom: 20px;
             padding: 10px;
@@ -145,6 +175,59 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.9);
+        }
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: white;
+            font-size: 40px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .modal-close:hover {
+            color: #ccc;
+        }
+        .modal-image {
+            display: block;
+            max-width: 90%;
+            max-height: 80vh;
+            margin: 5vh auto;
+        }
+        .modal-nav {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .nav-btn {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            font-size: 40px;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .nav-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        .image-info {
+            color: white;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -162,6 +245,18 @@
             <button onclick="refresh()">刷新</button>
         </div>
 
+        <div class="controls">
+            <input type="text" id="searchInput" placeholder="搜索文件..." class="search-input">
+            <select id="sortSelect" class="sort-select">
+                <option value="name-asc">名称 ↑</option>
+                <option value="name-desc">名称 ↓</option>
+                <option value="size-asc">大小 ↑</option>
+                <option value="size-desc">大小 ↓</option>
+                <option value="time-asc">时间 ↑</option>
+                <option value="time-desc">时间 ↓</option>
+            </select>
+        </div>
+
         <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
             <p>点击或拖拽文件到此处上传</p>
             <p style="color: #999; font-size: 12px; margin-top: 10px;">支持粘贴图片 (Ctrl+V / Cmd+V)</p>
@@ -172,14 +267,121 @@
         <div class="file-list" id="fileList"></div>
     </div>
 
+    <div id="imageModal" class="modal">
+        <span class="modal-close" onclick="closeImageModal()">&times;</span>
+        <img id="modalImage" class="modal-image">
+        <div class="modal-nav">
+            <button class="nav-btn" onclick="prevImage()">‹</button>
+            <span id="imageInfo" class="image-info"></span>
+            <button class="nav-btn" onclick="nextImage()">›</button>
+        </div>
+    </div>
+
     <script>
         let currentPath = '';
+        let allFiles = [];
+        let currentSort = 'name-asc';
+        let imageFiles = [];
+        let currentImageIndex = 0;
+
+        const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+
+        function isImageFile(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            return imageExtensions.includes(ext);
+        }
+
+        // 文件图标映射系统
+        const fileIcons = {
+            // 文档
+            'txt': '📝',
+            'doc': '📘',
+            'docx': '📘',
+            'pdf': '📕',
+            'md': '📓',
+
+            // 图片
+            'jpg': '🖼️',
+            'jpeg': '🖼️',
+            'png': '🖼️',
+            'gif': '🖼️',
+            'bmp': '🖼️',
+            'svg': '🖼️',
+            'webp': '🖼️',
+
+            // 视频
+            'mp4': '🎬',
+            'avi': '🎬',
+            'mkv': '🎬',
+            'mov': '🎬',
+
+            // 音频
+            'mp3': '🎵',
+            'wav': '🎵',
+            'flac': '🎵',
+
+            // 压缩包
+            'zip': '📦',
+            'rar': '📦',
+            'tar': '📦',
+            'gz': '📦',
+            '7z': '📦',
+
+            // 代码
+            'js': '📜',
+            'ts': '📜',
+            'py': '🐍',
+            'go': '🔷',
+            'java': '☕',
+            'cpp': '⚙️',
+            'c': '⚙️',
+            'html': '🌐',
+            'css': '🎨',
+            'json': '📋',
+            'xml': '📋',
+            'yaml': '📋',
+            'yml': '📋',
+
+            // 可执行文件
+            'exe': '⚙️',
+            'sh': '⚙️',
+            'bat': '⚙️',
+
+            // 默认
+            'default': '📄'
+        };
+
+        function getFileIcon(filename, isDir) {
+            if (isDir) return '📁';
+
+            const parts = filename.split('.');
+            if (parts.length === 1) {
+                return '❓';
+            }
+
+            const ext = parts.pop().toLowerCase();
+            return fileIcons[ext] || fileIcons['default'];
+        }
 
         window.onload = function() {
             updateBreadcrumb();
             loadFiles();
             setupPasteHandler();
             setupDragAndDrop();
+
+            const searchInput = document.getElementById('searchInput');
+            const sortSelect = document.getElementById('sortSelect');
+
+            if (searchInput) {
+                searchInput.addEventListener('input', filterAndDisplayFiles);
+            }
+
+            if (sortSelect) {
+                sortSelect.addEventListener('change', function(e) {
+                    currentSort = e.target.value;
+                    filterAndDisplayFiles();
+                });
+            }
         };
 
         function getCurrentPath() {
@@ -215,16 +417,52 @@
             fetch('/api/files?path=' + encodeURIComponent(currentPath))
                 .then(res => res.json())
                 .then(data => {
-                    displayFiles(data.files || []);
+                    allFiles = data.files || [];
+                    filterAndDisplayFiles();
                 })
                 .catch(err => {
                     showMessage('加载文件列表失败: ' + err.message, 'error');
                 });
         }
 
+        function filterAndDisplayFiles() {
+            const searchInput = document.getElementById('searchInput');
+            const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+            let filtered = allFiles.filter(file =>
+                file.name.toLowerCase().includes(searchTerm)
+            );
+
+            filtered = sortFiles(filtered, currentSort);
+            displayFiles(filtered);
+        }
+
+        function sortFiles(files, sortType) {
+            const [field, order] = sortType.split('-');
+
+            return files.slice().sort((a, b) => {
+                if (a.isDir !== b.isDir) {
+                    return a.isDir ? -1 : 1;
+                }
+
+                let comparison = 0;
+                if (field === 'name') {
+                    comparison = a.name.localeCompare(b.name);
+                } else if (field === 'size') {
+                    comparison = a.size - b.size;
+                } else if (field === 'time') {
+                    comparison = a.modTime - b.modTime;
+                }
+
+                return order === 'asc' ? comparison : -comparison;
+            });
+        }
+
         function displayFiles(files) {
             const fileList = document.getElementById('fileList');
             fileList.textContent = '';
+
+            imageFiles = files.filter(f => !f.isDir && isImageFile(f.name));
 
             files.forEach(file => {
                 const item = document.createElement('div');
@@ -232,14 +470,24 @@
 
                 const iconSpan = document.createElement('span');
                 iconSpan.className = 'file-icon';
-                iconSpan.textContent = file.isDir ? '📁' : '📄';
+                iconSpan.textContent = getFileIcon(file.name, file.isDir);
                 item.appendChild(iconSpan);
 
                 const link = document.createElement('a');
                 link.className = 'file-name';
-                link.href = file.isDir ?
-                    '?path=' + encodeURIComponent(file.path) :
-                    '/files/' + encodeURIComponent(file.path);
+
+                if (file.isDir) {
+                    link.href = '?path=' + encodeURIComponent(file.path);
+                } else if (isImageFile(file.name)) {
+                    link.href = '#';
+                    link.onclick = function(e) {
+                        e.preventDefault();
+                        openImageModal(file, imageFiles.indexOf(file));
+                    };
+                } else {
+                    link.href = '/files/' + encodeURIComponent(file.path);
+                }
+
                 link.textContent = file.name;
                 item.appendChild(link);
 
@@ -257,9 +505,18 @@
                     editBtn.textContent = '编辑';
                     editBtn.onclick = function(e) {
                         e.preventDefault();
-                        editFile(file.path);
+                        editFile(file.path, file.size);
                     };
                     actionsDiv.appendChild(editBtn);
+
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.className = 'btn-small download';
+                    downloadBtn.textContent = '下载';
+                    downloadBtn.onclick = function(e) {
+                        e.preventDefault();
+                        downloadFile(file.path);
+                    };
+                    actionsDiv.appendChild(downloadBtn);
 
                     item.appendChild(actionsDiv);
                 }
@@ -341,8 +598,29 @@
             window.location.href = '/editor?dir=' + encodeURIComponent(currentPath);
         }
 
-        function editFile(filePath) {
+        function editFile(filePath, fileSize) {
+            const ONE_MB = 1024 * 1024;
+
+            if (fileSize && fileSize > ONE_MB) {
+                const sizeMB = (fileSize / ONE_MB).toFixed(2);
+                const confirmed = confirm(
+                    '该文件大小为 ' + sizeMB + ' MB，可能会导致浏览器卡顿。\n\n是否继续打开？'
+                );
+                if (!confirmed) {
+                    return;
+                }
+            }
+
             window.location.href = '/editor?file=' + encodeURIComponent(filePath) + '&dir=' + encodeURIComponent(currentPath);
+        }
+
+        function downloadFile(filePath) {
+            const link = document.createElement('a');
+            link.href = '/files/' + encodeURIComponent(filePath);
+            link.download = '';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
         }
 
         function refresh() {
@@ -402,6 +680,51 @@
                 }
             });
         }
+
+        function openImageModal(file, index) {
+            currentImageIndex = index;
+            const modal = document.getElementById('imageModal');
+            const img = document.getElementById('modalImage');
+
+            img.src = '/files/' + encodeURIComponent(file.path);
+            modal.style.display = 'block';
+
+            updateImageInfo();
+        }
+
+        function closeImageModal() {
+            document.getElementById('imageModal').style.display = 'none';
+        }
+
+        function prevImage() {
+            if (imageFiles.length === 0) return;
+            currentImageIndex = (currentImageIndex - 1 + imageFiles.length) % imageFiles.length;
+            const file = imageFiles[currentImageIndex];
+            document.getElementById('modalImage').src = '/files/' + encodeURIComponent(file.path);
+            updateImageInfo();
+        }
+
+        function nextImage() {
+            if (imageFiles.length === 0) return;
+            currentImageIndex = (currentImageIndex + 1) % imageFiles.length;
+            const file = imageFiles[currentImageIndex];
+            document.getElementById('modalImage').src = '/files/' + encodeURIComponent(file.path);
+            updateImageInfo();
+        }
+
+        function updateImageInfo() {
+            const info = document.getElementById('imageInfo');
+            info.textContent = (currentImageIndex + 1) + ' / ' + imageFiles.length;
+        }
+
+        document.addEventListener('keydown', function(e) {
+            const modal = document.getElementById('imageModal');
+            if (modal.style.display === 'block') {
+                if (e.key === 'ArrowLeft') prevImage();
+                if (e.key === 'ArrowRight') nextImage();
+                if (e.key === 'Escape') closeImageModal();
+            }
+        });
     </script>
 </body>
 </html>
