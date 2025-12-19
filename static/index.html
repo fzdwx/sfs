@@ -144,6 +144,13 @@
         .btn-small.download:hover {
             background: #138496;
         }
+        .btn-small.rename {
+            background: #ffc107;
+            color: #333;
+        }
+        .btn-small.rename:hover {
+            background: #e0a800;
+        }
         .breadcrumb {
             margin-bottom: 20px;
             padding: 10px;
@@ -246,7 +253,7 @@
         </div>
 
         <div class="controls">
-            <input type="text" id="searchInput" placeholder="搜索文件..." class="search-input">
+            <input type="text" id="searchInput" placeholder="搜索文件... (快捷键: / 或 Ctrl+K)" class="search-input">
             <select id="sortSelect" class="sort-select">
                 <option value="name-asc">名称 ↑</option>
                 <option value="name-desc">名称 ↓</option>
@@ -496,10 +503,12 @@
                     sizeSpan.className = 'file-size';
                     sizeSpan.textContent = formatSize(file.size);
                     item.appendChild(sizeSpan);
+                }
 
-                    const actionsDiv = document.createElement('div');
-                    actionsDiv.className = 'file-actions';
+                const actionsDiv = document.createElement('div');
+                actionsDiv.className = 'file-actions';
 
+                if (!file.isDir) {
                     const editBtn = document.createElement('button');
                     editBtn.className = 'btn-small';
                     editBtn.textContent = '编辑';
@@ -517,9 +526,18 @@
                         downloadFile(file.path);
                     };
                     actionsDiv.appendChild(downloadBtn);
-
-                    item.appendChild(actionsDiv);
                 }
+
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'btn-small rename';
+                renameBtn.textContent = '重命名';
+                renameBtn.onclick = function(e) {
+                    e.preventDefault();
+                    renameFile(file.path, file.name);
+                };
+                actionsDiv.appendChild(renameBtn);
+
+                item.appendChild(actionsDiv);
 
                 fileList.appendChild(item);
             });
@@ -623,6 +641,34 @@
             document.body.removeChild(link);
         }
 
+        function renameFile(filePath, oldName) {
+            const newName = prompt('请输入新名称:', oldName);
+            if (!newName || newName === oldName) return;
+
+            fetch('/api/rename', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    oldPath: filePath,
+                    newName: newName
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('重命名成功', 'success');
+                    loadFiles();
+                } else {
+                    showMessage('重命名失败: ' + data.error, 'error');
+                }
+            })
+            .catch(err => {
+                showMessage('重命名失败: ' + err.message, 'error');
+            });
+        }
+
         function refresh() {
             loadFiles();
         }
@@ -719,10 +765,44 @@
 
         document.addEventListener('keydown', function(e) {
             const modal = document.getElementById('imageModal');
+            const searchInput = document.getElementById('searchInput');
+
+            // 图片预览快捷键
             if (modal.style.display === 'block') {
                 if (e.key === 'ArrowLeft') prevImage();
                 if (e.key === 'ArrowRight') nextImage();
                 if (e.key === 'Escape') closeImageModal();
+                return;
+            }
+
+            // 搜索框快捷键
+            const activeElement = document.activeElement;
+            const isInputFocused = activeElement.tagName === 'INPUT' ||
+                                   activeElement.tagName === 'TEXTAREA' ||
+                                   activeElement.tagName === 'SELECT';
+
+            // / 键聚焦搜索框（不在输入框时）
+            if (e.key === '/' && !isInputFocused) {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                return;
+            }
+
+            // Ctrl+K 或 Cmd+K 聚焦搜索框
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+                return;
+            }
+
+            // Esc 清空并失焦搜索框
+            if (e.key === 'Escape' && activeElement === searchInput) {
+                searchInput.value = '';
+                searchInput.blur();
+                filterAndDisplayFiles();
+                return;
             }
         });
     </script>

@@ -51,6 +51,7 @@ func startServer(port int, dir string) {
 	http.HandleFunc("/api/upload", handleUpload)
 	http.HandleFunc("/api/put", handlePutFile)
 	http.HandleFunc("/api/mkdir", handleMkdir)
+	http.HandleFunc("/api/rename", handleRename)
 	http.HandleFunc("/api/read", handleReadFile)
 	http.HandleFunc("/api/save", handleSaveFile)
 	http.HandleFunc("/files/", handleFileServe)
@@ -301,6 +302,62 @@ func handleMkdir(w http.ResponseWriter, r *http.Request) {
 	}
 
 	err = os.MkdirAll(fullPath, 0755)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+	})
+}
+
+func handleRename(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		OldPath string `json:"oldPath"`
+		NewName string `json:"newName"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	oldFullPath := filepath.Join(serveDir, req.OldPath)
+
+	if !strings.HasPrefix(filepath.Clean(oldFullPath), serveDir) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid path",
+		})
+		return
+	}
+
+	dir := filepath.Dir(oldFullPath)
+	newFullPath := filepath.Join(dir, req.NewName)
+
+	if !strings.HasPrefix(filepath.Clean(newFullPath), serveDir) {
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "Invalid new name",
+		})
+		return
+	}
+
+	err = os.Rename(oldFullPath, newFullPath)
 	if err != nil {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
