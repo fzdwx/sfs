@@ -137,10 +137,55 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            position: relative;
         }
         #vditor {
-            flex: 1;
-            overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+        }
+        #vditor.active {
+            display: block;
+        }
+        #plainTextEditor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            display: none;
+            box-sizing: border-box;
+        }
+        #plainTextEditor:focus {
+            border-color: #007bff;
+        }
+        #mediaViewer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: #000;
         }
         textarea:focus {
             border-color: #007bff;
@@ -182,8 +227,8 @@
         <div class="editor-container">
             <div class="editor-panel">
                 <div id="vditor"></div>
-                <textarea id="plainTextEditor" style="display: none; width: 100%; height: 100%; padding: 15px; border: 1px solid #ddd; border-radius: 4px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none;"></textarea>
-                <div id="mediaViewer" style="display: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000;">
+                <textarea id="plainTextEditor"></textarea>
+                <div id="mediaViewer">
                     <img id="imageViewer" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;" />
                     <video id="videoViewer" controls style="max-width: 100%; max-height: 100%; display: none;"></video>
                     <audio id="audioViewer" controls style="width: 80%; display: none;"></audio>
@@ -283,13 +328,15 @@
 
             if (isMarkdown) {
                 // 只对.md文件初始化Vditor编辑器
+                // 先显示vditor容器，让Vditor能正确计算尺寸
+                document.getElementById('vditor').classList.add('active');
+
                 vditor = new Vditor('vditor', {
                     height: '100%',
-                    mode: 'ir', // 即时渲染模式
+                    mode: 'ir', // 使用分屏预览模式（split view）
                     placeholder: '开始编辑...',
                     theme: 'classic',
                     preview: {
-                        mode: 'both', // 编辑和预览并排显示
                         delay: 300,
                     },
                     toolbar: [
@@ -515,56 +562,40 @@
             const videoExts = ['mp4', 'webm', 'ogg', 'avi', 'mov', 'mkv'];
             const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a'];
 
+            // 获取所有编辑器元素
+            const vditorEl = document.getElementById('vditor');
+            const plainEditor = document.getElementById('plainTextEditor');
+            const mediaViewer = document.getElementById('mediaViewer');
+            const imageViewer = document.getElementById('imageViewer');
+            const videoViewer = document.getElementById('videoViewer');
+            const audioViewer = document.getElementById('audioViewer');
+
+            // 隐藏所有编辑器
+            vditorEl.classList.remove('active');
+            plainEditor.style.display = 'none';
+            mediaViewer.style.display = 'none';
+            imageViewer.style.display = 'none';
+            videoViewer.style.display = 'none';
+            audioViewer.style.display = 'none';
+
             if (imageExts.includes(ext)) {
                 // 显示图片查看器
-                document.getElementById('vditor').style.display = 'none';
-                document.getElementById('plainTextEditor').style.display = 'none';
-                const mediaViewer = document.getElementById('mediaViewer');
-                const imageViewer = document.getElementById('imageViewer');
-                const videoViewer = document.getElementById('videoViewer');
-                const audioViewer = document.getElementById('audioViewer');
-
                 mediaViewer.style.display = 'flex';
                 imageViewer.style.display = 'block';
-                videoViewer.style.display = 'none';
-                audioViewer.style.display = 'none';
-
                 imageViewer.src = '/files/' + encodeURIComponent(filePath);
             } else if (videoExts.includes(ext)) {
                 // 显示视频播放器
-                document.getElementById('vditor').style.display = 'none';
-                document.getElementById('plainTextEditor').style.display = 'none';
-                const mediaViewer = document.getElementById('mediaViewer');
-                const imageViewer = document.getElementById('imageViewer');
-                const videoViewer = document.getElementById('videoViewer');
-                const audioViewer = document.getElementById('audioViewer');
-
                 mediaViewer.style.display = 'flex';
-                imageViewer.style.display = 'none';
                 videoViewer.style.display = 'block';
-                audioViewer.style.display = 'none';
-
                 videoViewer.src = '/files/' + encodeURIComponent(filePath);
             } else if (audioExts.includes(ext)) {
                 // 显示音频播放器
-                document.getElementById('vditor').style.display = 'none';
-                document.getElementById('plainTextEditor').style.display = 'none';
-                const mediaViewer = document.getElementById('mediaViewer');
-                const imageViewer = document.getElementById('imageViewer');
-                const videoViewer = document.getElementById('videoViewer');
-                const audioViewer = document.getElementById('audioViewer');
-
                 mediaViewer.style.display = 'flex';
-                imageViewer.style.display = 'none';
-                videoViewer.style.display = 'none';
                 audioViewer.style.display = 'block';
-
                 audioViewer.src = '/files/' + encodeURIComponent(filePath);
             } else if (ext === 'md') {
                 // Markdown文件 - 使用Vditor编辑器
-                document.getElementById('vditor').style.display = 'block';
-                document.getElementById('plainTextEditor').style.display = 'none';
-                document.getElementById('mediaViewer').style.display = 'none';
+                vditorEl.classList.add('active');
 
                 fetch('/api/read?path=' + encodeURIComponent(filePath))
                     .then(res => res.json())
@@ -582,15 +613,13 @@
                     });
             } else {
                 // 其他文本文件 - 使用普通编辑器
-                document.getElementById('vditor').style.display = 'none';
-                document.getElementById('plainTextEditor').style.display = 'block';
-                document.getElementById('mediaViewer').style.display = 'none';
+                plainEditor.style.display = 'block';
 
                 fetch('/api/read?path=' + encodeURIComponent(filePath))
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
-                            document.getElementById('plainTextEditor').value = data.content;
+                            plainEditor.value = data.content;
                         } else {
                             showMessage('加载文件失败: ' + data.error, 'error');
                         }

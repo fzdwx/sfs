@@ -546,7 +546,8 @@
   min-height: 60px;
   flex: 1;
   min-width: 1px;
-  position: relative;
+  position: absolute;
+  width: 100%;
 }
 .vditor-preview {
   flex: 1;
