@@ -10,9 +10,18 @@ Simple File Server - 一个功能丰富的静态文件服务器
 - 📂 创建目录
 - 📝 创建和编辑文本文件
 - ✏️ 在线文件编辑器（支持 Ctrl+S / Cmd+S 保存）
+- 📝 Markdown 实时预览（使用 Vditor 编辑器）
+- 🖼️ Markdown 中支持图片粘贴并实时展示
+- 🖼️ 图片查看器（在编辑器中打开图片时直接展示）
+- 🎬 视频播放器（支持 MP4、WebM 等格式）
+- 🎵 音频播放器（支持 MP3、WAV 等格式）
+- 📸 图片自动保存到 `/assert/` 目录并按时间命名
 - 🔍 文件搜索和排序（名称、大小、时间）
+- ⌨️ 搜索快捷键（/ 或 Ctrl+K 聚焦搜索框，ESC 清空）
 - 🖼️ 图片预览和轮播（支持键盘导航）
 - 🎨 智能文件图标（20+ 种文件类型）
+- ✏️ 文件和目录重命名
+- 🔗 复制文件下载链接（便于分享）
 - 🌐 自动显示所有可访问的 IP 地址
 - 💻 支持 curl 命令行上传
 - 🎨 现代化的 Web 界面
@@ -103,6 +112,7 @@ curl -X PUT "http://localhost:8080/api/put?path=videos/movie.mp4" --data-binary 
 - `POST /api/upload` - 上传文件（multipart/form-data）
 - `PUT /api/put?path=<path>` - 上传文件（用于 curl，二进制数据）
 - `POST /api/mkdir` - 创建目录
+- `POST /api/rename` - 重命名文件或目录
 - `GET /api/read?path=<path>` - 读取文件内容
 - `POST /api/save` - 保存文件
 - `GET /files/<path>` - 下载文件

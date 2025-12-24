@@ -151,6 +151,13 @@
         .btn-small.rename:hover {
             background: #e0a800;
         }
+        .btn-small.copy-link {
+            background: #6f42c1;
+            color: white;
+        }
+        .btn-small.copy-link:hover {
+            background: #5a32a3;
+        }
         .breadcrumb {
             margin-bottom: 20px;
             padding: 10px;
@@ -526,6 +533,15 @@
                         downloadFile(file.path);
                     };
                     actionsDiv.appendChild(downloadBtn);
+
+                    const copyLinkBtn = document.createElement('button');
+                    copyLinkBtn.className = 'btn-small copy-link';
+                    copyLinkBtn.textContent = '复制链接';
+                    copyLinkBtn.onclick = function(e) {
+                        e.preventDefault();
+                        copyFileLink(file.path);
+                    };
+                    actionsDiv.appendChild(copyLinkBtn);
                 }
 
                 const renameBtn = document.createElement('button');
@@ -666,6 +682,29 @@
             })
             .catch(err => {
                 showMessage('重命名失败: ' + err.message, 'error');
+            });
+        }
+
+        function copyFileLink(filePath) {
+            const url = window.location.origin + '/files/' + encodeURIComponent(filePath);
+
+            navigator.clipboard.writeText(url).then(() => {
+                showMessage('链接已复制到剪贴板', 'success');
+            }).catch(err => {
+                // 如果Clipboard API失败，使用备用方法
+                const textarea = document.createElement('textarea');
+                textarea.value = url;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                try {
+                    document.execCommand('copy');
+                    showMessage('链接已复制到剪贴板', 'success');
+                } catch (e) {
+                    showMessage('复制失败，请手动复制: ' + url, 'error');
+                }
+                document.body.removeChild(textarea);
             });
         }
 

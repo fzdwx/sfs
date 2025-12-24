@@ -1,23 +1,22 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-//go:embed static/index.html
-var indexHTML []byte
-
-//go:embed static/editor.html
-var editorHTML []byte
+//go:embed static
+var staticFS embed.FS
 
 var serveDir string
 
@@ -54,6 +53,10 @@ func startServer(port int, dir string) {
 	http.HandleFunc("/api/rename", handleRename)
 	http.HandleFunc("/api/read", handleReadFile)
 	http.HandleFunc("/api/save", handleSaveFile)
+
+	// Serve embedded static files
+	staticSubFS, _ := fs.Sub(staticFS, "static")
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 	http.HandleFunc("/files/", handleFileServe)
 
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
@@ -85,8 +88,13 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	content, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		http.Error(w, "Failed to load page", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(indexHTML)
+	w.Write(content)
 }
 
 type FileInfo struct {
@@ -155,17 +163,19 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	path := r.FormValue("path")
-	fullPath := filepath.Join(serveDir, path)
 
-	if !strings.HasPrefix(filepath.Clean(fullPath), serveDir) {
+	// 检测是否是图片上传（通过检查Content-Type或文件扩展名）
+	files := r.MultipartForm.File["files"]
+	if len(files) == 0 {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
-			"error":   "Invalid path",
+			"error":   "No files uploaded",
 		})
 		return
 	}
 
-	files := r.MultipartForm.File["files"]
+	var uploadedPath string
+
 	for _, fileHeader := range files {
 		file, err := fileHeader.Open()
 		if err != nil {
@@ -177,7 +187,53 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		}
 		defer file.Close()
 
-		destPath := filepath.Join(fullPath, fileHeader.Filename)
+		// 判断是否是图片
+		isImage := false
+		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+		imageExts := []string{".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg"}
+		for _, imgExt := range imageExts {
+			if ext == imgExt {
+				isImage = true
+				break
+			}
+		}
+
+		var destPath string
+		if isImage {
+			// 图片保存到 /assert/ 目录，使用时间命名
+			assertDir := filepath.Join(serveDir, "assert")
+			err := os.MkdirAll(assertDir, 0755)
+			if err != nil {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   err.Error(),
+				})
+				return
+			}
+
+			// 使用时间格式命名: 20060102_150405.png
+			timestamp := time.Now().Format("20060102_150405")
+			filename := timestamp + ext
+			destPath = filepath.Join(assertDir, filename)
+			uploadedPath = "assert/" + filename
+		} else {
+			// 非图片文件按原路径保存
+			fullPath := filepath.Join(serveDir, path)
+			if !strings.HasPrefix(filepath.Clean(fullPath), serveDir) {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": false,
+					"error":   "Invalid path",
+				})
+				return
+			}
+			destPath = filepath.Join(fullPath, fileHeader.Filename)
+			if path != "" {
+				uploadedPath = path + "/" + fileHeader.Filename
+			} else {
+				uploadedPath = fileHeader.Filename
+			}
+		}
+
 		dest, err := os.Create(destPath)
 		if err != nil {
 			json.NewEncoder(w).Encode(map[string]interface{}{
@@ -201,6 +257,7 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
+		"path":    uploadedPath,
 	})
 }
 
@@ -385,8 +442,13 @@ func handleFileServe(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleEditor(w http.ResponseWriter, r *http.Request) {
+	content, err := staticFS.ReadFile("static/editor.html")
+	if err != nil {
+		http.Error(w, "Failed to load page", http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(editorHTML)
+	w.Write(content)
 }
 
 func handleReadFile(w http.ResponseWriter, r *http.Request) {

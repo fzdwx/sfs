@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>文件编辑器</title>
+    <link rel="stylesheet" href="/static/vditor/index.css" />
+    <script src="/static/vditor/index.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -126,20 +128,19 @@
         }
         .editor-container {
             flex: 1;
+            display: flex;
             padding: 20px;
             overflow: hidden;
         }
-        textarea {
-            width: 100%;
-            height: 100%;
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-            font-size: 14px;
-            line-height: 1.5;
-            resize: none;
-            outline: none;
+        .editor-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #vditor {
+            flex: 1;
+            overflow: hidden;
         }
         textarea:focus {
             border-color: #007bff;
@@ -179,7 +180,15 @@
         </div>
 
         <div class="editor-container">
-            <textarea id="editor" placeholder="开始编辑..."></textarea>
+            <div class="editor-panel">
+                <div id="vditor"></div>
+                <textarea id="plainTextEditor" style="display: none; width: 100%; height: 100%; padding: 15px; border: 1px solid #ddd; border-radius: 4px; font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; font-size: 14px; line-height: 1.5; resize: none; outline: none;"></textarea>
+                <div id="mediaViewer" style="display: none; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #000;">
+                    <img id="imageViewer" style="max-width: 100%; max-height: 100%; object-fit: contain; display: none;" />
+                    <video id="videoViewer" controls style="max-width: 100%; max-height: 100%; display: none;"></video>
+                    <audio id="audioViewer" controls style="width: 80%; display: none;"></audio>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -188,6 +197,7 @@
         let currentDir = '';
         let isNewFile = false;
         let fileTreeData = {};
+        let vditor = null;
 
         // 文件图标映射系统
         const fileIcons = {
@@ -268,12 +278,114 @@
 
             loadFileTree();
 
-            if (filePath) {
-                currentPath = filePath;
-                loadFile(filePath);
+            // 检查是否是Markdown文件
+            const isMarkdown = filePath && filePath.toLowerCase().endsWith('.md');
+
+            if (isMarkdown) {
+                // 只对.md文件初始化Vditor编辑器
+                vditor = new Vditor('vditor', {
+                    height: '100%',
+                    mode: 'ir', // 即时渲染模式
+                    placeholder: '开始编辑...',
+                    theme: 'classic',
+                    preview: {
+                        mode: 'both', // 编辑和预览并排显示
+                        delay: 300,
+                    },
+                    toolbar: [
+                        'emoji',
+                        'headings',
+                        'bold',
+                        'italic',
+                        'strike',
+                        'link',
+                        '|',
+                        'list',
+                        'ordered-list',
+                        'check',
+                        'outdent',
+                        'indent',
+                        '|',
+                        'quote',
+                        'line',
+                        'code',
+                        'inline-code',
+                        'insert-before',
+                        'insert-after',
+                        '|',
+                        'upload',
+                        'table',
+                        '|',
+                        'undo',
+                        'redo',
+                        '|',
+                        'fullscreen',
+                        'edit-mode',
+                        {
+                            name: 'more',
+                            toolbar: [
+                                'both',
+                                'code-theme',
+                                'content-theme',
+                                'export',
+                                'outline',
+                                'preview',
+                                'devtools',
+                                'info',
+                                'help',
+                            ],
+                        }],
+                    upload: {
+                        url: '/api/upload',
+                        fieldName: 'files',
+                        format(files, responseText) {
+                            const response = JSON.parse(responseText);
+                            if (response.success) {
+                                // 使用后端返回的path（图片会自动保存到 /assert/ 目录）
+                                const imagePath = response.path || files[0].name;
+                                const imageUrl = '/files/' + encodeURIComponent(imagePath);
+                                return JSON.stringify({
+                                    msg: '',
+                                    code: 0,
+                                    data: {
+                                        errFiles: [],
+                                        succMap: {
+                                            [files[0].name]: imageUrl
+                                        }
+                                    }
+                                });
+                            } else {
+                                return JSON.stringify({
+                                    msg: response.error || '上传失败',
+                                    code: 1,
+                                    data: {
+                                        errFiles: [files[0].name],
+                                        succMap: {}
+                                    }
+                                });
+                            }
+                        }
+                    },
+                    after: () => {
+                        // Vditor初始化完成后加载文件
+                        if (filePath) {
+                            currentPath = filePath;
+                            loadFile(filePath);
+                        } else {
+                            isNewFile = true;
+                            document.getElementById('filename').textContent = '新建文件';
+                        }
+                    }
+                });
             } else {
-                isNewFile = true;
-                document.getElementById('filename').textContent = '新建文件';
+                // 非Markdown文件，直接加载
+                if (filePath) {
+                    currentPath = filePath;
+                    loadFile(filePath);
+                } else {
+                    isNewFile = true;
+                    document.getElementById('filename').textContent = '新建文件';
+                }
             }
         };
 
@@ -395,19 +507,98 @@
         }
 
         function loadFile(filePath) {
-            fetch('/api/read?path=' + encodeURIComponent(filePath))
-                .then(res => res.json())
-                .then(data => {
-                    if (data.success) {
-                        document.getElementById('editor').value = data.content;
-                        document.getElementById('filename').textContent = filePath;
-                    } else {
-                        showMessage('加载文件失败: ' + data.error, 'error');
-                    }
-                })
-                .catch(err => {
-                    showMessage('加载文件失败: ' + err.message, 'error');
-                });
+            document.getElementById('filename').textContent = filePath;
+
+            // 检测文件类型
+            const ext = filePath.split('.').pop().toLowerCase();
+            const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
+            const videoExts = ['mp4', 'webm', 'ogg', 'avi', 'mov', 'mkv'];
+            const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'm4a'];
+
+            if (imageExts.includes(ext)) {
+                // 显示图片查看器
+                document.getElementById('vditor').style.display = 'none';
+                document.getElementById('plainTextEditor').style.display = 'none';
+                const mediaViewer = document.getElementById('mediaViewer');
+                const imageViewer = document.getElementById('imageViewer');
+                const videoViewer = document.getElementById('videoViewer');
+                const audioViewer = document.getElementById('audioViewer');
+
+                mediaViewer.style.display = 'flex';
+                imageViewer.style.display = 'block';
+                videoViewer.style.display = 'none';
+                audioViewer.style.display = 'none';
+
+                imageViewer.src = '/files/' + encodeURIComponent(filePath);
+            } else if (videoExts.includes(ext)) {
+                // 显示视频播放器
+                document.getElementById('vditor').style.display = 'none';
+                document.getElementById('plainTextEditor').style.display = 'none';
+                const mediaViewer = document.getElementById('mediaViewer');
+                const imageViewer = document.getElementById('imageViewer');
+                const videoViewer = document.getElementById('videoViewer');
+                const audioViewer = document.getElementById('audioViewer');
+
+                mediaViewer.style.display = 'flex';
+                imageViewer.style.display = 'none';
+                videoViewer.style.display = 'block';
+                audioViewer.style.display = 'none';
+
+                videoViewer.src = '/files/' + encodeURIComponent(filePath);
+            } else if (audioExts.includes(ext)) {
+                // 显示音频播放器
+                document.getElementById('vditor').style.display = 'none';
+                document.getElementById('plainTextEditor').style.display = 'none';
+                const mediaViewer = document.getElementById('mediaViewer');
+                const imageViewer = document.getElementById('imageViewer');
+                const videoViewer = document.getElementById('videoViewer');
+                const audioViewer = document.getElementById('audioViewer');
+
+                mediaViewer.style.display = 'flex';
+                imageViewer.style.display = 'none';
+                videoViewer.style.display = 'none';
+                audioViewer.style.display = 'block';
+
+                audioViewer.src = '/files/' + encodeURIComponent(filePath);
+            } else if (ext === 'md') {
+                // Markdown文件 - 使用Vditor编辑器
+                document.getElementById('vditor').style.display = 'block';
+                document.getElementById('plainTextEditor').style.display = 'none';
+                document.getElementById('mediaViewer').style.display = 'none';
+
+                fetch('/api/read?path=' + encodeURIComponent(filePath))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            if (vditor) {
+                                vditor.setValue(data.content);
+                            }
+                        } else {
+                            showMessage('加载文件失败: ' + data.error, 'error');
+                        }
+                    })
+                    .catch(err => {
+                        showMessage('加载文件失败: ' + err.message, 'error');
+                    });
+            } else {
+                // 其他文本文件 - 使用普通编辑器
+                document.getElementById('vditor').style.display = 'none';
+                document.getElementById('plainTextEditor').style.display = 'block';
+                document.getElementById('mediaViewer').style.display = 'none';
+
+                fetch('/api/read?path=' + encodeURIComponent(filePath))
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            document.getElementById('plainTextEditor').value = data.content;
+                        } else {
+                            showMessage('加载文件失败: ' + data.error, 'error');
+                        }
+                    })
+                    .catch(err => {
+                        showMessage('加载文件失败: ' + err.message, 'error');
+                    });
+            }
         }
 
         function saveFile() {
@@ -419,7 +610,16 @@
                 path = currentDir ? currentDir + '/' + filename : filename;
             }
 
-            const content = document.getElementById('editor').value;
+            // 根据文件类型获取内容
+            let content = '';
+            const ext = path.split('.').pop().toLowerCase();
+            if (ext === 'md' && vditor) {
+                // Markdown文件使用Vditor
+                content = vditor.getValue();
+            } else {
+                // 其他文本文件使用普通编辑器
+                content = document.getElementById('plainTextEditor').value;
+            }
 
             fetch('/api/save', {
                 method: 'POST',
